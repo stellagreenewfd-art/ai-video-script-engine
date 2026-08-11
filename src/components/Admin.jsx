@@ -51,8 +51,18 @@ export default function Admin() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-semibold text-white">管理后台</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-white">管理后台</h2>
+        <Btn onClick={() => { loadStats(); loadUsers(q.trim()) }} disabled={loading}>
+          {loading ? '刷新中…' : '刷新'}
+        </Btn>
+      </div>
       <ErrorBox msg={err} />
+      {err && (
+        <div className="text-xs text-slate-500">
+          提示：若显示「需要管理员权限」，请用管理员账户(qaq)登录。
+        </div>
+      )}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

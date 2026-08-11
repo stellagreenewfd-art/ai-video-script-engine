@@ -170,10 +170,10 @@ export async function listUsers({ q = '', limit = 200 } = {}) {
      FROM ${T.users} u
      LEFT JOIN (SELECT user_id, COUNT(*) AS cnt FROM ${T.resources} WHERE kind='scripts' GROUP BY user_id) s ON s.user_id = u.id
      LEFT JOIN (SELECT user_id, COUNT(*) AS cnt FROM ${T.resources} WHERE kind='products' GROUP BY user_id) p ON p.user_id = u.id
-     WHERE ($1 = '' OR u.email ILIKE $1 OR u.username ILIKE $1)
+     WHERE ($1 = '%%' OR u.email ILIKE $1 OR u.username ILIKE $1)
      ORDER BY u.created_at DESC
      LIMIT $2`,
-    [q, limit]
+    [like, limit]
   )
   return rows
 }

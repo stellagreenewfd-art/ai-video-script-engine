@@ -7,6 +7,7 @@ import Studio from './components/Studio'
 import Config from './components/Config'
 import Trend from './components/Trend'
 import Effect from './components/Effect'
+import Admin from './components/Admin'
 
 const NAV = [
   { key: 'studio', label: '脚本工作台', icon: '🎬' },
