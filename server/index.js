@@ -25,12 +25,26 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
 })
 
 async function start() {
+  // 兼容 postgresql:// → postgres://（pg 库只认后者）
+  let dbUrl = process.env.DATABASE_URL || ''
+  if (dbUrl.startsWith('postgresql://')) {
+    dbUrl = dbUrl.replace('postgresql://', 'postgres://')
+  }
+  // 外部连接强制 SSL
+  if (!dbUrl.includes('?') && !dbUrl.includes('sslmode')) {
+    dbUrl += '?sslmode=require'
+  } else if (dbUrl.includes('?') && !dbUrl.includes('sslmode')) {
+    dbUrl += '&sslmode=require'
+  }
+  process.env.DATABASE_URL = dbUrl
+
   try {
     await pool.query('SELECT 1')
     console.log('[db] 连接成功')
   } catch (e) {
     console.error('[db] 连接失败：', e.message)
-    console.error('[db] 请检查 DATABASE_URL 环境变量')
+    console.error('[db] code:', e.code)
+    console.error('[db] DATABASE_URL 前20字符:', dbUrl.slice(0, 20))
     process.exit(1)
   }
   await migrate()
