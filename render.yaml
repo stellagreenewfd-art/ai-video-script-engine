@@ -1,12 +1,12 @@
-# Render 部署配置：一键创建 Postgres + Web Service
+# Render 部署配置（复用你已有的 Postgres，不新建数据库）
 # 在 Render 控制台 → New → Blueprint → 连此仓库即可。
-databases:
-  - name: script-engine-db
-    databaseName: scriptengine
-    user: scriptengine
-    plan: free
-    postgresMajorVersion: 16
-
+#
+# 重要：本配置不再创建数据库，改用你账号上已有的 Postgres。
+# 部署后请到 Web Service 的 Environment 里手动添加以下变量：
+#   DATABASE_URL     = 你现有 Postgres（ecommerce-kb-db）的 Connection String
+#   ADMIN_USERNAME   = qaq
+#   ADMIN_PASSWORD   = qaq881205
+#   ADMIN_EMAIL      = qaq@admin.local
 services:
   - type: web
     name: script-engine
@@ -18,10 +18,6 @@ services:
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: script-engine-db
-          property: connectionString
       - key: NODE_ENV
         value: production
       - key: JWT_SECRET
@@ -30,3 +26,4 @@ services:
         generateValue: true
       - key: DEEPSEEK_BASE
         value: https://api.deepseek.com
+      # DATABASE_URL / ADMIN_* 请在 Render 仪表盘手动添加（见文件顶部注释）
