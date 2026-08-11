@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import {
   pool,
+  T,
   createUser,
   getUserByEmail,
   getUserById,
@@ -61,7 +62,7 @@ router.post('/auth/register', async (req, res) => {
   if (exists) return res.status(409).json({ error: '该邮箱已注册' })
   if (username) {
     const byName = await pool.query(
-      `SELECT id FROM users WHERE username = $1`,
+      `SELECT id FROM ${T.users} WHERE username = $1`,
       [username]
     )
     if (byName.rows.length) return res.status(409).json({ error: '该用户名已被占用' })
@@ -93,7 +94,7 @@ router.post('/auth/login', async (req, res) => {
   const identifier = String(req.body.identifier || req.body.email || '').trim().toLowerCase()
   const password = String(req.body.password || '')
   const { rows } = await pool.query(
-    `SELECT * FROM users WHERE email = $1 OR username = $1`,
+    `SELECT * FROM ${T.users} WHERE email = $1 OR username = $1`,
     [identifier]
   )
   const user = rows[0]
