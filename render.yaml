@@ -1,0 +1,32 @@
+# Render 部署配置：一键创建 Postgres + Web Service
+# 在 Render 控制台 → New → Blueprint → 连此仓库即可。
+databases:
+  - name: script-engine-db
+    databaseName: scriptengine
+    user: scriptengine
+    plan: free
+    postgresMajorVersion: 16
+
+services:
+  - type: web
+    name: script-engine
+    runtime: node
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: script-engine-db
+          property: connectionString
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: API_KEY_SECRET
+        generateValue: true
+      - key: DEEPSEEK_BASE
+        value: https://api.deepseek.com
