@@ -31,7 +31,7 @@ const DEFAULT_COLLECTIONS = {
 export const COLLECTION_KINDS = Object.keys(DEFAULT_COLLECTIONS)
 
 // 表名加 se_ 前缀，避免与复用数据库中的旧表冲突
-const T = {
+export const T = {
   users: 'se_users',
   resources: 'se_resources',
 }
