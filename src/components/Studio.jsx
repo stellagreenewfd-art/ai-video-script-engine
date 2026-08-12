@@ -5,8 +5,10 @@ import {
   buildPainMapMessages,
   buildScriptMessages,
   buildCharacterSceneMessages,
+  buildRewriteMessages,
   productFactsText,
 } from '../lib/prompts'
+import { getBannedForChannel, scanScript, summarizeHits } from '../lib/bannedWords'
 import {
   sampleDimensionCombo,
   recentCombosFromScripts,
@@ -79,6 +81,7 @@ export default function Studio() {
   const [script, setScript] = useState(null)
   const [charScene, setCharScene] = useState(null)
   const [savedId, setSavedId] = useState(null)
+  const [violations, setViolations] = useState([])
   const [loading, setLoading] = useState(null)
   const [err, setErr] = useState('')
   const [toast, setToast] = useState('')
@@ -127,6 +130,7 @@ export default function Studio() {
     setCharScene(null)
     setCombo(null)
     setSavedId(null)
+    setViolations([])
     setStep('product')
   }
 
@@ -208,6 +212,7 @@ export default function Studio() {
 
       const region = regions[gen.regionCode]
       const channel = channels[gen.channelCode]
+      const banned = getBannedForChannel(gen.channelCode)
       const msgs = buildScriptMessages({
         p: activeProduct,
         combo: c,
@@ -217,6 +222,7 @@ export default function Studio() {
         painMap,
         avoidHooks,
         charScene,
+        bannedWords: banned,
       })
       const res = await chat({
         model: settings.model,
@@ -232,6 +238,9 @@ export default function Studio() {
         regionCode: gen.regionCode,
       }
       setScript(full)
+      const hits = scanScript(full, { channelCode: gen.channelCode })
+      setViolations(hits)
+      full.audit = { hits, bannedCount: banned.length, channelCode: gen.channelCode }
       const ns = saveScript(full)
       setSavedId(ns.id)
       setStep('result')
@@ -277,6 +286,49 @@ export default function Studio() {
     await generateScript()
   }
 
+  // ---------- 模块三附：违禁词一键规避改写 ----------
+  async function rewriteAvoidingBanned() {
+    if (!hasKey) return setErr('请先在设置页配置 DeepSeek Key')
+    if (!violations.length) return
+    setErr('')
+    setLoading('rewrite')
+    try {
+      const banned = getBannedForChannel(gen.channelCode)
+      const msgs = buildRewriteMessages({
+        script,
+        hits: violations,
+        bannedWords: banned,
+      })
+      const res = await chat({
+        model: settings.model,
+        messages: msgs,
+        json: true,
+      })
+      if (res._raw) throw new Error('改写失败，请重试')
+      const merged = {
+        ...res,
+        dimensionCombo: script.dimensionCombo,
+        productId: script.productId,
+        channelCode: script.channelCode,
+        regionCode: script.regionCode,
+        characterScene: script.characterScene,
+      }
+      setScript(merged)
+      const hits = scanScript(merged, { channelCode: gen.channelCode })
+      setViolations(hits)
+      merged.audit = { hits, bannedCount: banned.length, channelCode: gen.channelCode }
+      const sid = savedId || (saveScript(merged).id)
+      if (savedId) updateScript(savedId, merged)
+      else setSavedId(sid)
+      if (hits.length === 0) flash('已规避全部违禁词 ✓')
+      else flash(`改写完成，剩余 ${hits.length} 处待处理`)
+    } catch (e) {
+      setErr(e.message)
+    } finally {
+      setLoading(null)
+    }
+  }
+
   function copyScript() {
     if (!script) return
     const text = EXPORTERS[exportFmt].fn(script)
@@ -290,6 +342,7 @@ export default function Studio() {
     setScript(s)
     setCharScene(s.characterScene || null)
     setCombo(s.dimensionCombo || null)
+    setViolations(s.audit?.hits || [])
     setProductId(s.productId)
     const p = products.find((x) => x.id === s.productId)
     if (p)
@@ -370,12 +423,15 @@ export default function Studio() {
           script={script}
           charScene={charScene}
           combo={combo || script.dimensionCombo}
+          violations={violations}
           loading={loading === 'char'}
+          rewriting={loading === 'rewrite'}
           exportFmt={exportFmt}
           setExportFmt={setExportFmt}
           onCopy={copyScript}
           onGenChar={() => generateChar(savedId, script, regions[gen.regionCode])}
           onRegen={regenerateWithNewCombo}
+          onRewrite={rewriteAvoidingBanned}
           onBack={() => setStep('generate')}
           channel={channels[gen.channelCode]}
         />
@@ -420,6 +476,88 @@ export default function Studio() {
 function comboText(c) {
   if (!c) return '—'
   return Object.values(c).join(' · ')
+}
+
+const SEVERITY_COLOR = {
+  high: 'rose',
+  medium: 'amber',
+  low: 'slate',
+}
+const SEVERITY_LABEL = {
+  high: '高危',
+  medium: '中危',
+  low: '低危',
+}
+
+// 平台违禁词合规审核面板
+function ComplianceCard({ summary, violations, onRewrite, rewriting, channelName }) {
+  const clean = summary.level === 'clean'
+  const banner = clean
+    ? {
+        cls: 'bg-emerald-950/40 border-emerald-800/50 text-emerald-200',
+        icon: '✓',
+        title: '合规通过',
+        sub: `已通过${channelName ? `「${channelName}」` : ''}平台违禁词审核，可直接使用`,
+      }
+    : {
+        cls:
+          summary.level === 'high'
+            ? 'bg-rose-950/40 border-rose-800/50 text-rose-200'
+            : 'bg-amber-950/40 border-amber-800/50 text-amber-200',
+        icon: '⚠',
+        title: `发现 ${summary.total} 处违禁/限用词风险`,
+        sub: `高危 ${summary.high} · 中危 ${summary.mid} · 低危 ${summary.low}（点击「一键规避改写」自动替换为合规表达）`,
+      }
+
+  return (
+    <Card title="平台违禁词审核（自动合规）">
+      <div className={`rounded-lg border px-4 py-3 ${banner.cls}`}>
+        <div className="flex items-center gap-2 font-medium">
+          <span className="text-lg leading-none">{banner.icon}</span>
+          {banner.title}
+        </div>
+        <div className="text-xs opacity-80 mt-1">{banner.sub}</div>
+      </div>
+
+      {!clean && (
+        <>
+          <div className="mt-3 space-y-2 max-h-72 overflow-auto pr-1">
+            {violations.map((h, i) => (
+              <div
+                key={i}
+                className="bg-slate-950/50 rounded-lg p-3 text-sm grid grid-cols-[auto_1fr] gap-x-3 gap-y-1"
+              >
+                <div className="row-span-2">
+                  <Tag color={SEVERITY_COLOR[h.severity]}>
+                    {SEVERITY_LABEL[h.severity]}
+                  </Tag>
+                </div>
+                <div className="text-slate-200">
+                  <span className="text-rose-300 font-medium">{h.word}</span>
+                  <span className="text-slate-500 text-xs"> · {h.field} · {h.category}</span>
+                </div>
+                <div className="text-slate-400 text-xs">
+                  原文：{h.snippet}
+                  <div className="text-emerald-300/90 mt-0.5">
+                    → 建议替换：{h.suggestion}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <Btn
+              variant="primary"
+              onClick={onRewrite}
+              disabled={rewriting}
+            >
+              {rewriting ? '改写中…' : '一键规避改写'}
+            </Btn>
+          </div>
+        </>
+      )}
+    </Card>
+  )
 }
 
 function StepBar({ step, onJump }) {
@@ -741,17 +879,29 @@ function ResultStep({
   script,
   charScene,
   combo,
+  violations,
   loading,
+  rewriting,
   exportFmt,
   setExportFmt,
   onCopy,
   onGenChar,
   onRegen,
+  onRewrite,
   onBack,
   channel,
 }) {
+  const summary = summarizeHits(violations || [])
   return (
     <div className="space-y-4">
+      <ComplianceCard
+        summary={summary}
+        violations={violations || []}
+        onRewrite={onRewrite}
+        rewriting={rewriting}
+        channelName={channel?.name}
+      />
+
       <Card>
         <div className="flex items-start justify-between flex-wrap gap-2">
           <div>

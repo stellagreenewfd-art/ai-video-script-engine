@@ -101,6 +101,7 @@ export function buildScriptMessages({
   painMap,
   avoidHooks = [],
   charScene,
+  bannedWords = [],
 }) {
   const ds = DURATION_STRUCTURES[durationKey] || DURATION_STRUCTURES[30]
   const comboText = Object.entries(combo || {})
@@ -148,6 +149,13 @@ ${JSON.stringify(charScene, null, 2)}`
 3. 每个 shot 的 dialogue（口播台词）要像真人说话，subtitle 是上屏字幕重点。
 4. 结尾 CTA 遵循渠道引导惯例，软性促成转化，不硬喊"点击购买"。
 5. 严格遵守时长结构与画幅。
+6. 平台合规（重要）：以下为本渠道的高风险违禁/限用词，严禁出现在标题、钩子、任何台词或字幕中——${
+    bannedWords.length
+      ? bannedWords.map((b) => b.word).join('、')
+      : '（无）'
+  }。若语义上需要表达类似意思，必须使用合规替代说法（如"最好"→"我个人很推荐"），绝不出现任何极限词、绝对化承诺、医疗功效宣称或站外导流话术。${
+    bannedWords.length ? '\n命中这些词会导致视频被限流甚至下架，请逐句自查。' : ''
+  }
 
 只输出 JSON，不要额外解释。结构：
 {
@@ -194,6 +202,41 @@ ${avoidText}
 ${charText}
 
 请生成完整分镜脚本 JSON。`
+  return [
+    { role: 'system', content: system },
+    { role: 'user', content: user },
+  ]
+}
+
+// ---------- 模块三附：违禁词规避改写 ----------
+// 在不改变原意、结构、时长、人物场景一致性的前提下，把命中违禁词的字段替换成合规表达。
+export function buildRewriteMessages({ script, hits, bannedWords }) {
+  const hitLines = (hits || [])
+    .map(
+      (h) =>
+        `- 字段【${h.field}】命中"${h.word}"（${h.category}，${h.severity === 'high' ? '高危' : h.severity === 'medium' ? '中危' : '低危'}），建议替换：${h.suggestion}`
+    )
+    .join('\n')
+
+  const banText = (bannedWords || [])
+    .map((b) => b.word)
+    .join('、')
+
+  const system = `你是带货短视频合规改写师。任务：在不改变视频主题、结构、时长、人物场景设定与整体表达意图的前提下，将脚本中命中的平台违禁/限用词替换为合规表达，消除限流与下架风险。
+规则：
+1. 只改命中词所在句子，尽量保留原节奏与口语感；不得为规避而删掉关键信息或卖点。
+2. 严禁再出现以下任何词：${banText || '（无）'}。
+3. 极限词→主观体验表达；医疗功效→日常护理/使用感受；站外导流→平台内购物组件（购物车/橱窗）；强诱导→软性建议。
+4. 输出与输入完全同结构的 JSON（含 title/duration_sec/dimension_combo/hook/shots/cta/notes，shots 数量与 index 不变）。
+只输出 JSON，不要额外解释。`
+
+  const user = `【待改写脚本】
+${JSON.stringify(script, null, 2)}
+
+【命中清单（必须逐条处理）】
+${hitLines || '（无）'}
+
+请返回改写后的完整脚本 JSON。`
   return [
     { role: 'system', content: system },
     { role: 'user', content: user },
