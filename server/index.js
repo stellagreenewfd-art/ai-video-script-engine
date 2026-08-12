@@ -2,7 +2,7 @@
 import express from 'express'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { migrate, pool, ensureAdmin } from './db.js'
+import { migrate, pool, ensureAdmin, ensureBannedSeed } from './db.js'
 import { router } from './routes.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -49,6 +49,7 @@ async function start() {
   }
   await migrate()
   console.log('[db] 表结构就绪')
+  await ensureBannedSeed()
   await ensureAdmin()
   app.listen(PORT, () => {
     console.log(`[server] 监听 http://localhost:${PORT}`)

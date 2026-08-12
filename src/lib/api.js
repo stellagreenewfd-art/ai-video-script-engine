@@ -43,4 +43,8 @@ export const api = {
   deepseek: (payload) => req('/deepseek', { method: 'POST', body: payload }),
   adminStats: () => req('/admin/stats'),
   adminUsers: (q) => req(`/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+  getBannedWords: () => req('/banned-words'),
+  addBannedWord: (payload) =>
+    req('/admin/banned-words', { method: 'POST', body: payload }),
+  deleteBannedWord: (id) => req(`/admin/banned-words/${id}`, { method: 'DELETE' }),
 }

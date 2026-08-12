@@ -101,13 +101,16 @@ function platformsForChannel(channelCode) {
   return set
 }
 
-// 返回某渠道需要规避的违禁词列表（去重）
-export function getBannedForChannel(channelCode) {
+// 返回某渠道需要规避的违禁词列表（去重）。
+// words 可选：传入后端维护的全局词库；缺省则使用内置默认词库。
+export function getBannedForChannel(words, channelCode) {
+  const source = Array.isArray(words) && words.length ? words : BANNED_WORDS
   const plats = platformsForChannel(channelCode)
   const seen = new Set()
   const out = []
-  for (const b of BANNED_WORDS) {
-    if (!b.platforms.some((p) => plats.has(p))) continue
+  for (const b of source) {
+    const platsFor = b.platforms || ['all']
+    if (!platsFor.some((p) => plats.has(p))) continue
     if (seen.has(b.word)) continue
     seen.add(b.word)
     out.push(b)
@@ -131,9 +134,10 @@ function scriptTextFields(script) {
   return fields
 }
 
-// 扫描脚本，返回命中列表（每个命中含字段、原文片段、词、分类、严重度、建议）
-export function scanScript(script, { channelCode } = {}) {
-  const banned = getBannedForChannel(channelCode)
+// 扫描脚本，返回命中列表（每个命中含字段、原文片段、词、分类、严重度、建议）。
+// words 可选：传入后端全局词库；缺省按渠道使用内置默认词库。
+export function scanScript(script, { channelCode, words } = {}) {
+  const banned = getBannedForChannel(words, channelCode)
   const wordList = banned.map((b) => b.word)
   const metaByWord = new Map(banned.map((b) => [b.word, b]))
   const fields = scriptTextFields(script)

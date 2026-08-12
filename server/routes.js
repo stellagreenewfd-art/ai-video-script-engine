@@ -13,6 +13,9 @@ import {
   putCollection,
   listUsers,
   adminStats,
+  listBannedWords,
+  addBannedWord,
+  deleteBannedWord,
   COLLECTION_KINDS,
 } from './db.js'
 import { encrypt, decrypt } from './encrypt.js'
@@ -209,6 +212,25 @@ adminRouter.get('/users', async (req, res) => {
   const q = String(req.query.q || '')
   const limit = Math.min(parseInt(req.query.limit) || 200, 500)
   res.json({ users: await listUsers({ q, limit }) })
+})
+
+// 违禁词库增删（全局，管理员维护）
+router.get('/banned-words', authMiddleware, async (req, res) => {
+  res.json({ words: await listBannedWords() })
+})
+
+adminRouter.post('/banned-words', async (req, res) => {
+  try {
+    const w = await addBannedWord(req.body || {})
+    res.json({ word: w })
+  } catch (e) {
+    res.status(400).json({ error: e.message })
+  }
+})
+
+adminRouter.delete('/banned-words/:id', async (req, res) => {
+  await deleteBannedWord(req.params.id)
+  res.json({ ok: true })
 })
 
 router.use('/admin', adminRouter)

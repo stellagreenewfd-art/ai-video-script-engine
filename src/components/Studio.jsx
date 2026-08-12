@@ -71,6 +71,7 @@ export default function Studio() {
     dimensionPool,
     channels,
     regions,
+    bannedWords,
   } = useApp()
 
   const [step, setStep] = useState('product')
@@ -212,7 +213,7 @@ export default function Studio() {
 
       const region = regions[gen.regionCode]
       const channel = channels[gen.channelCode]
-      const banned = getBannedForChannel(gen.channelCode)
+      const banned = getBannedForChannel(bannedWords, gen.channelCode)
       const msgs = buildScriptMessages({
         p: activeProduct,
         combo: c,
@@ -238,7 +239,7 @@ export default function Studio() {
         regionCode: gen.regionCode,
       }
       setScript(full)
-      const hits = scanScript(full, { channelCode: gen.channelCode })
+      const hits = scanScript(full, { channelCode: gen.channelCode, words: banned })
       setViolations(hits)
       full.audit = { hits, bannedCount: banned.length, channelCode: gen.channelCode }
       const ns = saveScript(full)
@@ -293,7 +294,7 @@ export default function Studio() {
     setErr('')
     setLoading('rewrite')
     try {
-      const banned = getBannedForChannel(gen.channelCode)
+      const banned = getBannedForChannel(bannedWords, gen.channelCode)
       const msgs = buildRewriteMessages({
         script,
         hits: violations,
@@ -314,7 +315,7 @@ export default function Studio() {
         characterScene: script.characterScene,
       }
       setScript(merged)
-      const hits = scanScript(merged, { channelCode: gen.channelCode })
+      const hits = scanScript(merged, { channelCode: gen.channelCode, words: banned })
       setViolations(hits)
       merged.audit = { hits, bannedCount: banned.length, channelCode: gen.channelCode }
       const sid = savedId || (saveScript(merged).id)

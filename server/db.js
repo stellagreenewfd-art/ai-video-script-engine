@@ -7,6 +7,7 @@ import {
   DEFAULT_CHANNELS,
   DEFAULT_REGIONS,
 } from '../src/lib/constants.js'
+import { BANNED_WORDS } from '../src/lib/bannedWords.js'
 
 const connectionString = process.env.DATABASE_URL
 const isRemote = !!connectionString && /render\.com|amazonaws\.com/.test(connectionString)
@@ -34,6 +35,7 @@ export const COLLECTION_KINDS = Object.keys(DEFAULT_COLLECTIONS)
 export const T = {
   users: 'se_users',
   resources: 'se_resources',
+  banned: 'se_banned_words',
 }
 
 export async function migrate() {
@@ -58,6 +60,16 @@ export async function migrate() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_${T.resources}_user ON ${T.resources}(user_id);
+
+    CREATE TABLE IF NOT EXISTS ${T.banned} (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      word text NOT NULL,
+      category text NOT NULL DEFAULT '其他',
+      severity text NOT NULL DEFAULT 'medium',
+      suggestion text NOT NULL DEFAULT '',
+      platforms jsonb NOT NULL DEFAULT '["all"]',
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
   `)
   // 兼容老表：补齐新增列
   await pool.query(
@@ -188,4 +200,47 @@ export async function adminStats() {
       (SELECT COUNT(*) FROM ${T.resources} WHERE kind='products') AS total_products
   `)
   return rows[0] || {}
+}
+
+// ---------- 违禁词库（全局，管理员维护） ----------
+// 首次启动用内置默认词库播种；之后以数据库为准，管理员可增删。
+export async function ensureBannedSeed() {
+  const { rows } = await pool.query(`SELECT COUNT(*) AS c FROM ${T.banned}`)
+  if (Number(rows[0]?.c) > 0) return
+  for (const b of BANNED_WORDS) {
+    await pool.query(
+      `INSERT INTO ${T.banned} (word, category, severity, suggestion, platforms)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [b.word, b.category, b.severity, b.suggestion, JSON.stringify(b.platforms || ['all'])]
+    )
+  }
+  console.log(`[banned] 已用默认词库播种 ${BANNED_WORDS.length} 条违禁词`)
+}
+
+export async function listBannedWords() {
+  const { rows } = await pool.query(
+    `SELECT id, word, category, severity, suggestion, platforms, created_at
+     FROM ${T.banned} ORDER BY severity DESC, category, word`
+  )
+  return rows
+}
+
+export async function addBannedWord({ word, category, severity, suggestion, platforms }) {
+  const w = String(word || '').trim()
+  if (!w) throw new Error('违禁词不能为空')
+  const cat = String(category || '其他').trim() || '其他'
+  const sev = ['high', 'medium', 'low'].includes(severity) ? severity : 'medium'
+  const sug = String(suggestion || '').trim()
+  const plats = Array.isArray(platforms) && platforms.length ? platforms : ['all']
+  const { rows } = await pool.query(
+    `INSERT INTO ${T.banned} (word, category, severity, suggestion, platforms)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, word, category, severity, suggestion, platforms, created_at`,
+    [w, cat, sev, sug, JSON.stringify(plats)]
+  )
+  return rows[0]
+}
+
+export async function deleteBannedWord(id) {
+  await pool.query(`DELETE FROM ${T.banned} WHERE id = $1`, [id])
 }

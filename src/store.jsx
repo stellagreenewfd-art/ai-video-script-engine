@@ -12,6 +12,7 @@ import {
   DEFAULT_CHANNELS,
   DEFAULT_REGIONS,
 } from './lib/constants'
+import { BANNED_WORDS } from './lib/bannedWords'
 
 const AppContext = createContext(null)
 
@@ -25,6 +26,7 @@ const DEFAULTS = {
   scripts: [],
   trendSignals: [],
   records: [],
+  bannedWords: BANNED_WORDS,
 }
 
 export function AppProvider({ children }) {
@@ -38,12 +40,13 @@ export function AppProvider({ children }) {
   const [scripts, setScripts] = useState(DEFAULTS.scripts)
   const [trendSignals, setTrendSignals] = useState(DEFAULTS.trendSignals)
   const [records, setRecords] = useState(DEFAULTS.records)
+  const [bannedWords, setBannedWords] = useState(DEFAULTS.bannedWords)
   const [ready, setReady] = useState(false)
 
   // 登录后拉取全部用户数据
   const bootstrap = useCallback(async () => {
     try {
-      const [s, dim, ch, rg, pr, sc, tr, rc] = await Promise.all([
+      const [s, dim, ch, rg, pr, sc, tr, rc, bw] = await Promise.all([
         api.getSettings(),
         api.getCollection('dimensionPool'),
         api.getCollection('channels'),
@@ -52,6 +55,7 @@ export function AppProvider({ children }) {
         api.getCollection('scripts'),
         api.getCollection('trendSignals'),
         api.getCollection('records'),
+        api.getBannedWords(),
       ])
       setSettingsState({
         model: s.model || 'deepseek-chat',
@@ -64,6 +68,7 @@ export function AppProvider({ children }) {
       setScripts(sc.data || [])
       setTrendSignals(tr.data || [])
       setRecords(rc.data || [])
+      setBannedWords(bw.words && bw.words.length ? bw.words : BANNED_WORDS)
       setReady(true)
     } catch (e) {
       console.error('数据加载失败：', e.message)
@@ -79,6 +84,7 @@ export function AppProvider({ children }) {
     setScripts(DEFAULTS.scripts)
     setTrendSignals(DEFAULTS.trendSignals)
     setRecords(DEFAULTS.records)
+    setBannedWords(DEFAULTS.bannedWords)
     setReady(false)
   }, [])
 
@@ -214,6 +220,7 @@ export function AppProvider({ children }) {
     addRecord,
     updateRecord,
     deleteRecord,
+    bannedWords,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
